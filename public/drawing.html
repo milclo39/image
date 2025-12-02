@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高機能お絵描きアプリ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        #canvas-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-color: #000;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            touch-action: none;
+        }
+        .toolbar {
+            position: fixed;
+            background-color: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 100;
+            flex-wrap: wrap;
+            cursor: move;
+            user-select: none;
+        }
+        .toolbar-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 10px;
+        }
+        .toolbar-group:not(:last-child) {
+            border-right: 1px solid #d1d5db;
+        }
+        .tool-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 16px;
+        }
+        .tool-btn:hover:not(:disabled) {
+            background-color: #e5e7eb;
+        }
+        .tool-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .tool-btn.active {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+        }
+        .tool-btn.recording {
+            border-color: #ef4444;
+            background-color: #fee2e2;
+            color: #ef4444;
+        }
+        .submenu {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 8px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 8px;
+            z-index: 110;
+        }
+        .hidden {
+            display: none;
+        }
+        /* 【追加】ドラッグしない要素のカーソル設定 */
+        .toolbar button, .toolbar select {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-gray-200">
+
+    <div id="canvas-container">
+        <canvas id="background-canvas"></canvas>
+        <canvas id="drawing-canvas"></canvas>
+    </div>
+
+    <video id="video-feed" playsinline style="display:none;"></video>
+    <input type="file" id="image-uploader" accept="image/*" style="display:none;">
+
+    <div class="toolbar" id="toolbar">
+        <div class="toolbar-group">
+            <button id="refresh-cameras-btn" class="tool-btn" title="カメラリストを更新">
+                <i class="fa-solid fa-sync text-gray-600"></i>
+            </button>
+            <select id="background-selector" class="custom-select">
+                <option value="white">ホワイト</option>
+                <option value="image">画像</option>
+            </select>
+        </div>
+        <div class="toolbar-group">
+            <button id="pen-btn" class="tool-btn active" title="ペン"><i class="fa-solid fa-pencil"></i></button>
+            <button id="eraser-btn" class="tool-btn" title="消しゴム"><i class="fa-solid fa-eraser"></i></button>
+            <div id="shape-picker-container" class="relative">
+                <button id="shape-picker-btn" class="tool-btn" title="図形">
+                    <i id="shape-indicator" class="fa-solid fa-shapes"></i>
+                </button>
+                <div id="shape-controls" class="submenu hidden flex gap-2">
+                    <button class="tool-btn shape-btn" data-shape="line" title="直線"><i class="fa-solid fa-slash"></i></button>
+                    <button class="tool-btn shape-btn" data-shape="rectangle" title="長方形"><i class="far fa-square"></i></button>
+                    <button class="tool-btn shape-btn" data-shape="circle" title="円"><i class="far fa-circle"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="toolbar-group">
+            <div id="color-picker-container" class="relative">
+                <button id="color-picker-btn" class="tool-btn" title="色を選択">
+                    <span id="color-indicator" class="w-5 h-5 rounded-full border border-gray-400" style="background-color: #000000;"></span>
+                </button>
+                <div id="color-controls" class="submenu hidden flex-wrap gap-2 w-32 justify-center">
+                     <button class="w-7 h-7 rounded-full border" style="background-color: #000000;" data-color="#000000" title="黒"></button>
+                    <button class="w-7 h-7 rounded-full border" style="background-color: #FFFFFF;" data-color="#FFFFFF" title="白"></button>
+                    <button class="w-7 h-7 rounded-full border" style="background-color: #EF4444;" data-color="#EF4444" title="赤"></button>
+                    <button class="w-7 h-7 rounded-full border" style="background-color: #F97316;" data-color="#F97316" title="橙"></button>
+                    <button class="w-7 h-7 rounded-full border" style="background-color: #EAB308;" data-color="#EAB308" title="黄"></button>
+                    <button class="w-7 h-7 rounded-full border" style="background-color: #22C55E;" data-color="#22C55E" title="緑"></button>
+                    <button class="w-7 h-7 rounded-full border" style="background-color: #3B82F6;" data-color="#3B82F6" title="青"></button>
+                    <button class="w-7 h-7 rounded-full border" style="background-color: #8B5CF6;" data-color="#8B5CF6" title="紫"></button>
+                </div>
+            </div>
+            <div id="size-picker-container" class="relative">
+                <button id="size-picker-btn" class="tool-btn" title="太さを選択">
+                    <span id="size-indicator" class="bg-black rounded-full" style="width: 10px; height: 10px;"></span>
+                </button>
+                <div id="size-controls" class="submenu hidden flex-col gap-2 items-center">
+                    <button class="tool-btn size-btn" data-size="5" title="5px"><span class="w-1 h-1 bg-black rounded-full"></span></button>
+                    <button class="tool-btn size-btn" data-size="10" title="10px"><span class="w-2 h-2 bg-black rounded-full"></span></button>
+                    <button class="tool-btn size-btn" data-size="20" title="20px"><span class="w-3 h-3 bg-black rounded-full"></span></button>
+                    <button class="tool-btn size-btn" data-size="40" title="40px"><span class="w-5 h-5 bg-black rounded-full"></span></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="toolbar-group">
+            <button id="undo-btn" class="tool-btn" title="元に戻す"><i class="fa-solid fa-undo"></i></button>
+            <button id="redo-btn" class="tool-btn" title="やり直す"><i class="fa-solid fa-redo"></i></button>
+        </div>
+        <div class="toolbar-group">
+            <button id="clear-btn" class="tool-btn" title="全消し"><i class="fa-solid fa-trash-can"></i></button>
+            <button id="record-btn" class="tool-btn" title="録画"><i class="fa-solid fa-video"></i></button>
+            <button id="download-btn" class="tool-btn" title="ダウンロード"><i class="fa-solid fa-download"></i></button>
+        </div>
+    </div>
+
+    <script>
+        window.addEventListener('load', () => {
+            // --- DOM要素取得 ---
+            const toolbar = document.getElementById('toolbar');
+            const drawingCanvas = document.getElementById('drawing-canvas');
+            const backgroundCanvas = document.getElementById('background-canvas');
+            const ctx = drawingCanvas.getContext('2d');
+            const bgCtx = backgroundCanvas.getContext('2d');
+            const video = document.getElementById('video-feed');
+            const imageUploader = document.getElementById('image-uploader');
+            const backgroundSelector = document.getElementById('background-selector');
+            const penBtn = document.getElementById('pen-btn');
+            const eraserBtn = document.getElementById('eraser-btn');
+            const clearBtn = document.getElementById('clear-btn');
+            const downloadBtn = document.getElementById('download-btn');
+            const refreshCamerasBtn = document.getElementById('refresh-cameras-btn');
+            const recordBtn = document.getElementById('record-btn');
+            const colorPickerBtn = document.getElementById('color-picker-btn');
+            const sizePickerBtn = document.getElementById('size-picker-btn');
+            const colorControls = document.getElementById('color-controls');
+            const sizeControls = document.getElementById('size-controls');
+            const colorIndicator = document.getElementById('color-indicator');
+            const sizeIndicator = document.getElementById('size-indicator');
+            const shapePickerBtn = document.getElementById('shape-picker-btn');
+            const shapeControls = document.getElementById('shape-controls');
+            const shapeIndicator = document.getElementById('shape-indicator');
+            const undoBtn = document.getElementById('undo-btn');
+            const redoBtn = document.getElementById('redo-btn');
+
+            // --- 状態管理変数 ---
+            let isDrawing = false;
+            let startX = 0, startY = 0;
+            let lastX = 0, lastY = 0;
+            let prevMidPointX = 0, prevMidPointY = 0;
+            let videoStream = null;
+            let animationFrameId = null;
+            let currentBackgroundImage = null;
+            let paths = [];
+            let redoPaths = [];
+            let currentPath = null;
+            let mediaRecorder = null;
+            let recordedChunks = [];
+            let isRecording = false;
+            let compositeStream = null;
+            let compositeAnimationId = null;
+            let savedCanvasState = null;
+            let isRightClickErasing = false;
+
+            let state = {
+                tool: 'pen', // pen, eraser, line, rectangle, circle
+                color: '#000000',
+                lineWidth: 10,
+            };
+
+            function resizeCanvas() {
+                if (isRecording) stopRecording();
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+                drawingCanvas.width = width;
+                drawingCanvas.height = height;
+                backgroundCanvas.width = width;
+                backgroundCanvas.height = height;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                redrawCurrentBackground();
+                redrawAllPaths();
+            }
+            
+            function redrawAllPaths() {
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height); 
+                paths.forEach(path => {
+                    if (!path || !path.points || path.points.length < 1) return;
+                    ctx.strokeStyle = path.color;
+                    ctx.lineWidth = path.lineWidth;
+                    ctx.globalCompositeOperation = path.mode;
+                    ctx.beginPath();
+
+                    const startPoint = { x: path.points[0].x * ctx.canvas.width, y: path.points[0].y * ctx.canvas.height };
+                    const endPoint = path.points.length > 1 ? { x: path.points[1].x * ctx.canvas.width, y: path.points[1].y * ctx.canvas.height } : startPoint;
+
+                    switch(path.type) {
+                        case 'line':
+                            ctx.moveTo(startPoint.x, startPoint.y);
+                            ctx.lineTo(endPoint.x, endPoint.y);
+                            ctx.stroke();
+                            break;
+                        case 'rectangle':
+                            ctx.strokeRect(startPoint.x, startPoint.y, endPoint.x - startPoint.x, endPoint.y - startPoint.y);
+                            break;
+                        case 'circle':
+                            const rx = Math.abs(endPoint.x - startPoint.x) / 2;
+                            const ry = Math.abs(endPoint.y - startPoint.y) / 2;
+                            const cx = startPoint.x + (endPoint.x - startPoint.x) / 2;
+                            const cy = startPoint.y + (endPoint.y - startPoint.y) / 2;
+                            ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+                            ctx.stroke();
+                            break;
+                        default: // freehand
+                            const absPoints = path.points.map(p => ({ x: p.x * ctx.canvas.width, y: p.y * ctx.canvas.height }));
+                            if (absPoints.length < 2) {
+                                ctx.arc(absPoints[0].x, absPoints[0].y, path.lineWidth / 2, 0, Math.PI * 2);
+                                ctx.fillStyle = path.color;
+                                ctx.fill();
+                                return;
+                            }
+                            let p1 = absPoints[0], p2 = absPoints[1];
+                            ctx.moveTo(p1.x, p1.y);
+                            for (let i = 1; i < absPoints.length - 1; i++) {
+                                const midPoint = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+                                ctx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
+                                p1 = absPoints[i];
+                                p2 = absPoints[i+1];
+                            }
+                            ctx.lineTo(p2.x, p2.y);
+                            ctx.stroke();
+                            break;
+                    }
+                });
+                ctx.beginPath();
+                ctx.globalCompositeOperation = 'source-over';
+            }
+
+            function redrawCurrentBackground() {
+                bgCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+                const selection = backgroundSelector.value;
+                if (selection === 'white') {
+                    bgCtx.fillStyle = 'white';
+                    bgCtx.fillRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+                } else if (selection === 'image' && currentBackgroundImage) {
+                    const img = currentBackgroundImage;
+                    const hRatio = backgroundCanvas.width / img.width, vRatio = backgroundCanvas.height / img.height;
+                    const ratio = Math.min(hRatio, vRatio);
+                    const centerShift_x = (backgroundCanvas.width - img.width * ratio) / 2;
+                    const centerShift_y = (backgroundCanvas.height - img.height * ratio) / 2;
+                    bgCtx.drawImage(img, 0, 0, img.width, img.height, centerShift_x, centerShift_y, img.width * ratio, img.height * ratio);
+                } else {
+                    bgCtx.fillStyle = 'black';
+                    bgCtx.fillRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+                }
+            }
+            
+            function draw(e) {
+                if (!isDrawing) return;
+                const [currentX, currentY] = getMousePos(e);
+                const currentTool = isRightClickErasing ? 'eraser' : state.tool;
+                if (currentTool === 'pen' || currentTool === 'eraser') {
+                    currentPath.points.push({ x: currentX / drawingCanvas.width, y: currentY / drawingCanvas.height });
+                    const midX = (lastX + currentX) / 2;
+                    const midY = (lastY + currentY) / 2;
+                    ctx.beginPath();
+                    ctx.moveTo(prevMidPointX, prevMidPointY);
+                    ctx.quadraticCurveTo(lastX, lastY, midX, midY);
+                    ctx.stroke();
+                    prevMidPointX = midX;
+                    prevMidPointY = midY;
+                    lastX = currentX;
+                    lastY = currentY;
+                } else { 
+                    ctx.putImageData(savedCanvasState, 0, 0);
+                    ctx.beginPath();
+                    switch(state.tool) {
+                        case 'line':
+                            ctx.moveTo(startX, startY);
+                            ctx.lineTo(currentX, currentY);
+                            break;
+                        case 'rectangle':
+                            ctx.rect(startX, startY, currentX - startX, currentY - startY);
+                            break;
+                        case 'circle':
+                            const rx = Math.abs(currentX - startX) / 2;
+                            const ry = Math.abs(currentY - startY) / 2;
+                            const cx = startX + (currentX - startX) / 2;
+                            const cy = startY + (currentY - startY) / 2;
+                            ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+                            break;
+                    }
+                    ctx.stroke();
+                }
+            }
+
+            function getMousePos(e) {
+                if (e.touches && e.touches.length > 0) return [e.touches[0].clientX, e.touches[0].clientY];
+                return [e.offsetX, e.offsetY];
+            }
+
+            function startDrawing(e) {
+                if (e.button === 2) {
+                    isRightClickErasing = true;
+                }
+                isDrawing = true;
+                const [currentX, currentY] = getMousePos(e);
+                ctx.strokeStyle = state.color;
+                ctx.lineWidth = state.lineWidth;
+                const currentTool = isRightClickErasing ? 'eraser' : state.tool;
+                ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+                if (currentTool === 'pen' || currentTool === 'eraser') {
+                    currentPath = {
+                        type: 'freehand',
+                        points: [{ x: currentX / drawingCanvas.width, y: currentY / drawingCanvas.height }],
+                        color: state.color,
+                        lineWidth: state.lineWidth,
+                        mode: ctx.globalCompositeOperation
+                    };
+                    prevMidPointX = currentX;
+                    prevMidPointY = currentY;
+                    lastX = currentX;
+                    lastY = currentY;
+                } else {
+                    savedCanvasState = ctx.getImageData(0, 0, drawingCanvas.width, drawingCanvas.height);
+                    startX = currentX;
+                    startY = currentY;
+                }
+            }
+            
+            function stopDrawing(e) {
+                if (!isDrawing) return;
+                isDrawing = false;
+                const [currentX, currentY] = getMousePos(e);
+                const currentTool = isRightClickErasing ? 'eraser' : state.tool;
+                if (currentTool === 'pen' || currentTool === 'eraser') {
+                    if (currentPath && currentPath.points.length > 0) {
+                        paths.push(currentPath);
+                        redoPaths = [];
+                    }
+                } else {
+                    ctx.putImageData(savedCanvasState, 0, 0);
+                    const newShape = {
+                        type: state.tool,
+                        points: [
+                            { x: startX / drawingCanvas.width, y: startY / drawingCanvas.height },
+                            { x: currentX / drawingCanvas.width, y: currentY / drawingCanvas.height }
+                        ],
+                        color: state.color,
+                        lineWidth: state.lineWidth,
+                        mode: 'source-over'
+                    };
+                    paths.push(newShape);
+                    redoPaths = [];
+                    redrawAllPaths();
+                }
+                currentPath = null;
+                ctx.beginPath();
+                isRightClickErasing = false;
+                updateUndoRedoButtons();
+            }
+            
+            function updateUndoRedoButtons() {
+                undoBtn.disabled = paths.length === 0;
+                redoBtn.disabled = redoPaths.length === 0;
+            }
+
+            function handleBackgroundChange() {
+                if (isRecording) stopRecording();
+                const selection = backgroundSelector.value;
+                if (selection === 'white' || selection === 'image') {
+                    if (videoStream) stopCamera();
+                    if (selection === 'image') imageUploader.click();
+                    else redrawCurrentBackground();
+                } else {
+                    startCamera(selection);
+                }
+            }
+            
+            async function updateCameraList() { /* ... 既存のコード ... */ }
+            async function startCamera(deviceId) { /* ... 既存のコード ... */ }
+            function stopCamera(redraw = true) { /* ... 既存のコード ... */ }
+            function startRecording() { /* ... 既存のコード ... */ }
+            function stopRecording() { /* ... 既存のコード ... */ }
+
+            // --- イベントリスナー ---
+            function setActiveTool(tool) {
+                state.tool = tool;
+                penBtn.classList.toggle('active', tool === 'pen');
+                eraserBtn.classList.toggle('active', tool === 'eraser');
+                shapePickerBtn.classList.toggle('active', ['line', 'rectangle', 'circle'].includes(tool));
+            }
+            penBtn.addEventListener('click', () => setActiveTool('pen'));
+            eraserBtn.addEventListener('click', () => setActiveTool('eraser'));
+            recordBtn.addEventListener('click', () => isRecording ? stopRecording() : startRecording());
+            drawingCanvas.addEventListener('mousedown', startDrawing);
+            drawingCanvas.addEventListener('mousemove', draw);
+            drawingCanvas.addEventListener('mouseup', stopDrawing);
+            drawingCanvas.addEventListener('mouseout', stopDrawing);
+            drawingCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDrawing(e); }, { passive: false });
+            drawingCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); }, { passive: false });
+            drawingCanvas.addEventListener('touchend', stopDrawing);
+            drawingCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+            colorPickerBtn.addEventListener('click', e => { e.stopPropagation(); colorControls.classList.toggle('hidden'); sizeControls.classList.add('hidden'); shapeControls.classList.add('hidden'); });
+            sizePickerBtn.addEventListener('click', e => { e.stopPropagation(); sizeControls.classList.toggle('hidden'); colorControls.classList.add('hidden'); shapeControls.classList.add('hidden'); });
+            shapePickerBtn.addEventListener('click', e => { e.stopPropagation(); shapeControls.classList.toggle('hidden'); colorControls.classList.add('hidden'); sizeControls.classList.add('hidden'); });
+            colorControls.addEventListener('click', e => { /* ... 既存のコード ... */ });
+            sizeControls.addEventListener('click', e => { /* ... 既存のコード ... */ });
+            shapeControls.addEventListener('click', e => { /* ... 既存のコード ... */ });
+            clearBtn.addEventListener('click', () => { /* ... 既存のコード ... */ });
+            undoBtn.addEventListener('click', () => { /* ... 既存のコード ... */ });
+            redoBtn.addEventListener('click', () => { /* ... 既存のコード ... */ });
+            downloadBtn.addEventListener('click', () => { /* ... 既存のコード ... */ });
+            backgroundSelector.addEventListener('change', handleBackgroundChange);
+            refreshCamerasBtn.addEventListener('click', () => { updateCameraList(); });
+            imageUploader.addEventListener('change', (e) => { /* ... 既存のコード ... */ });
+            window.addEventListener('click', () => {
+                colorControls.classList.add('hidden'); 
+                sizeControls.classList.add('hidden'); 
+                shapeControls.classList.add('hidden');
+            });
+            
+            // --- 【新規】ツールバーをドラッグ可能にする処理 ---
+            let isDraggingToolbar = false;
+            let dragOffsetX, dragOffsetY;
+
+            toolbar.addEventListener('mousedown', (e) => {
+                // ボタンやセレクトボックス上ではドラッグを開始しない
+                if (e.target.closest('button, select')) return;
+                
+                isDraggingToolbar = true;
+                const rect = toolbar.getBoundingClientRect();
+                dragOffsetX = e.clientX - rect.left;
+                dragOffsetY = e.clientY - rect.top;
+                
+                // ドラッグ中のカーソルを設定
+                toolbar.style.cursor = 'grabbing';
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDraggingToolbar) return;
+                
+                // 画面の範囲内に収まるように位置を調整
+                let newX = e.clientX - dragOffsetX;
+                let newY = e.clientY - dragOffsetY;
+                const toolbarWidth = toolbar.offsetWidth;
+                const toolbarHeight = toolbar.offsetHeight;
+                
+                newX = Math.max(0, Math.min(newX, window.innerWidth - toolbarWidth));
+                newY = Math.max(0, Math.min(newY, window.innerHeight - toolbarHeight));
+
+                toolbar.style.left = `${newX}px`;
+                toolbar.style.top = `${newY}px`;
+            });
+
+            window.addEventListener('mouseup', () => {
+                isDraggingToolbar = false;
+                toolbar.style.cursor = 'move'; // カーソルを元に戻す
+            });
+
+
+            // --- 初期化 ---
+            function initialize() {
+                // ツールバーの初期位置を画面下部中央に設定
+                toolbar.style.top = `${window.innerHeight - toolbar.offsetHeight - 20}px`;
+                toolbar.style.left = `${(window.innerWidth - toolbar.offsetWidth) / 2}px`;
+
+                resizeCanvas();
+                updateCameraList();
+                updateUndoRedoButtons();
+                window.addEventListener('resize', resizeCanvas);
+            }
+            
+            // 既存の関数定義をここに移動・統合
+            async function updateCameraList() {
+                const selectedValue = backgroundSelector.value;
+                try {
+                    const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    tempStream.getTracks().forEach(track => track.stop());
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                    const currentCameraOptions = Array.from(backgroundSelector.querySelectorAll('option')).filter(o => o.value !== 'white' && o.value !== 'image');
+                    currentCameraOptions.forEach(o => o.remove());
+                    videoDevices.forEach((device, index) => {
+                        const option = document.createElement('option');
+                        option.value = device.deviceId;
+                        option.text = device.label || `カメラ ${index + 1}`;
+                        backgroundSelector.appendChild(option);
+                    });
+                    if (Array.from(backgroundSelector.options).some(opt => opt.value === selectedValue)) {
+                        backgroundSelector.value = selectedValue;
+                    }
+                } catch (err) { console.error("カメラの検出に失敗しました:", err); }
+            }
+            async function startCamera(deviceId) {
+                if(videoStream) stopCamera(false);
+                try {
+                    videoStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } } });
+                    video.srcObject = videoStream;
+                    await video.play();
+                    function drawVideoFrame() {
+                        if (!videoStream) return;
+                        const vW = video.videoWidth, vH = video.videoHeight;
+                        const cW = backgroundCanvas.width, cH = backgroundCanvas.height;
+                        bgCtx.fillStyle = 'black';
+                        bgCtx.fillRect(0, 0, cW, cH);
+                        const ratio = Math.min(cW / vW, cH / vH);
+                        const dW = vW * ratio, dH = vH * ratio;
+                        const oX = (cW - dW) / 2, oY = (cH - dH) / 2;
+                        bgCtx.drawImage(video, oX, oY, dW, dH);
+                        animationFrameId = requestAnimationFrame(drawVideoFrame);
+                    }
+                    drawVideoFrame();
+                } catch (err) { console.error("カメラの起動に失敗しました:", err); stopCamera(); backgroundSelector.value = 'white'; handleBackgroundChange(); }
+            }
+            function stopCamera(redraw = true) {
+                if (isRecording) stopRecording();
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                if (videoStream) videoStream.getTracks().forEach(track => track.stop());
+                animationFrameId = null; videoStream = null; video.srcObject = null;
+                if (redraw) redrawCurrentBackground();
+            }
+            function startRecording() {
+                if (!videoStream) { alert("録画を開始するには、まずカメラを選択してください。"); return; }
+                isRecording = true;
+                recordBtn.classList.add('recording');
+                recordBtn.querySelector('i').classList.replace('fa-video', 'fa-stop');
+                const compositeCanvas = document.createElement('canvas');
+                compositeCanvas.width = drawingCanvas.width;
+                compositeCanvas.height = drawingCanvas.height;
+                const compositeCtx = compositeCanvas.getContext('2d');
+                function recordLoop() {
+                    compositeCtx.drawImage(backgroundCanvas, 0, 0);
+                    compositeCtx.drawImage(drawingCanvas, 0, 0);
+                    compositeAnimationId = requestAnimationFrame(recordLoop);
+                }
+                recordLoop();
+                compositeStream = compositeCanvas.captureStream(25);
+                mediaRecorder = new MediaRecorder(compositeStream, { mimeType: 'video/webm;codecs=vp9' });
+                recordedChunks = [];
+                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'recording.webm';
+                    document.body.appendChild(a); a.click();
+                    window.URL.revokeObjectURL(url); document.body.removeChild(a);
+                };
+                mediaRecorder.start();
+            }
+            function stopRecording() {
+                if (!mediaRecorder) return;
+                mediaRecorder.stop();
+                cancelAnimationFrame(compositeAnimationId);
+                compositeStream.getTracks().forEach(track => track.stop());
+                isRecording = false;
+                recordBtn.classList.remove('recording');
+                recordBtn.querySelector('i').classList.replace('fa-stop', 'fa-video');
+                compositeStream = null; mediaRecorder = null; compositeAnimationId = null;
+            }
+            
+            colorControls.addEventListener('click', e => { if(e.target.tagName === 'BUTTON') { state.color = e.target.dataset.color; colorIndicator.style.backgroundColor = state.color; colorControls.classList.add('hidden'); } });
+            sizeControls.addEventListener('click', e => { const sizeBtn = e.target.closest('.size-btn'); if(sizeBtn) { state.lineWidth = sizeBtn.dataset.size; sizeIndicator.style.width = `${Math.max(2, state.lineWidth / 2.5)}px`; sizeIndicator.style.height = `${Math.max(2, state.lineWidth / 2.5)}px`; sizeControls.classList.add('hidden'); } });
+            shapeControls.addEventListener('click', e => { const shapeBtn = e.target.closest('.shape-btn'); if (shapeBtn) { const shape = shapeBtn.dataset.shape; setActiveTool(shape); shapeIndicator.className = shapeBtn.querySelector('i').className; shapeControls.classList.add('hidden'); } });
+            clearBtn.addEventListener('click', () => { ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height); paths = []; redoPaths = []; updateUndoRedoButtons(); });
+            undoBtn.addEventListener('click', () => { if (paths.length === 0) return; redoPaths.push(paths.pop()); redrawAllPaths(); updateUndoRedoButtons(); });
+            redoBtn.addEventListener('click', () => { if (redoPaths.length === 0) return; paths.push(redoPaths.pop()); redrawAllPaths(); updateUndoRedoButtons(); });
+            downloadBtn.addEventListener('click', () => { const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); tempCanvas.width = drawingCanvas.width; tempCanvas.height = drawingCanvas.height; tempCtx.drawImage(backgroundCanvas, 0, 0); tempCtx.drawImage(drawingCanvas, 0, 0); const a = document.createElement('a'); a.download = 'drawing.png'; a.href = tempCanvas.toDataURL('image/png'); a.click(); });
+            imageUploader.addEventListener('change', (e) => { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (event) => { const img = new Image(); img.onload = () => { currentBackgroundImage = img; redrawCurrentBackground(); }; img.src = event.target.result; }; reader.readAsDataURL(file); });
+            
+            initialize();
+        });
+    </script>
+</body>
+</html>
