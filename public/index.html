@@ -2,419 +2,506 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Creative Portal Hub</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>miclobox</title>
     <link rel="icon" href="icon.png">
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Poppins:wght@600&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         body {
-            font-family: 'Poppins', 'Noto Sans JP', sans-serif;
-            background: #0f172a;
-            color: white;
-            overflow-x: hidden;
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+            background: #333;
+            font-family: sans-serif;
+            user-select: none;
         }
-
-        /* 背景のアニメーション */
-        .bg-mesh {
-            position: fixed;
-            top: 0;
-            left: 0;
+        #canvas-container {
+            position: relative;
             width: 100vw;
             height: 100vh;
-            z-index: -1;
-            background: radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
-                        radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
-                        radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
-            background-size: 200% 200%;
-            animation: gradientBG 15s ease infinite;
         }
-
-        @keyframes gradientBG {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-
-        /* グラスモーフィズムカード */
-        .glass-card {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .glass-card:hover {
-            transform: translateY(-5px);
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.3);
-            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
-        }
-
-        /* ページ遷移アニメーション */
-        .page-section {
-            display: none;
-            opacity: 0;
-            transition: opacity 0.4s ease-in-out;
-            animation: fadeIn 0.5s ease-out forwards;
-        }
-
-        .page-section.active {
-            display: block;
-            opacity: 1;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* キャンバス用 */
         canvas {
-            cursor: crosshair;
-            touch-action: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: block;
         }
+        #bgCanvas { z-index: 0; background: white; }
+        #drawCanvas { z-index: 1; background: transparent; }
+        
+        /* --- ボタン共通スタイル --- */
+        button {
+            width: 44px;
+            height: 44px;
+            font-size: 20px;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            outline: none;
+        }
+        button:active { transform: scale(0.92); }
+
+        /* ツール選択状態 */
+        button.active-tool {
+            background: #3b82f6; color: white;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+        button.camera-active {
+            background: #10b981; color: white;
+        }
+
+        /* --- メイン操作パネル --- */
+        .controls {
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        /* --- 設定パネル --- */
+        .pen-settings {
+            position: fixed;
+            top: 70px;
+            left: 15px;
+            z-index: 99;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px);
+            padding: 12px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            width: fit-content;
+        }
+        .pen-settings.show { display: flex; }
+        
+        .setting-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .setting-group:not(:last-child) {
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        /* --- 色・太さ・透過ボタン --- */
+        .color-btn {
+            width: 28px; height: 28px; border-radius: 50%; padding: 0; box-shadow: none;
+            border: 2px solid transparent;
+        }
+        .color-btn.selected {
+            border-color: #555; transform: scale(1.15); box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .size-btn {
+            width: 36px; height: 36px; background: transparent; box-shadow: none; border: 1px solid #eee;
+        }
+        .size-btn.selected { background: #eef2ff; border-color: #3b82f6; }
+        .dot { background: #333; border-radius: 50%; display: block; }
+        .opacity-btn {
+            width: auto; padding: 0 8px; font-size: 12px; font-weight: bold; height: 32px;
+            background: white; border: 1px solid #ddd; color: #666;
+        }
+        .opacity-btn.selected { background: #3b82f6; color: white; border-color: #3b82f6; }
+
+        /* --- 録画・撮影用バー --- */
+        .media-controls {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            gap: 25px;
+        }
+        #snap-btn, #record-btn {
+            width: 64px; height: 64px; border-radius: 50%; font-size: 26px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        #record-btn .icon {
+            width: 26px; height: 26px; background: #ef4444; border-radius: 50%; transition: all 0.3s;
+        }
+        #record-btn.recording { border: 4px solid rgba(239,68,68,0.3); background: white; }
+        #record-btn.recording .icon { border-radius: 4px; transform: scale(0.6); }
+
     </style>
 </head>
-<body class="min-h-screen flex flex-col">
+<body>
 
-    <!-- 背景 -->
-    <div class="bg-mesh"></div>
+<div class="controls">
+    <button id="camera-btn" title="カメラ起動/停止">📷</button>
+    <button id="pen-tool-btn" class="active-tool" title="ペン">✏️</button>
+    <button id="settings-toggle-btn" title="ペン設定">🎨</button>
+    <button id="eraser-btn" title="消しゴム">🧼</button>
+    <button id="undo-btn" title="元に戻す">↩️</button>
+    <button id="clear-btn" title="全消去">🗑️</button>
+</div>
 
-    <!-- ヘッダー -->
-    <header class="p-6 flex justify-between items-center glass-card border-x-0 border-t-0 sticky top-0 z-50 rounded-none">
-        <div class="flex items-center gap-3 cursor-pointer" onclick="navigateTo('home')">
-            <i data-lucide="layout-grid" class="w-8 h-8 text-indigo-400"></i>
-            <h1 class="text-2xl font-bold tracking-wider">PORTAL<span class="text-indigo-400">.X</span></h1>
-        </div>
-        <nav>
-            <button onclick="navigateTo('home')" class="px-4 py-2 rounded-full hover:bg-white/10 transition text-sm font-bold">HOME</button>
-        </nav>
-    </header>
+<div id="pen-settings" class="pen-settings">
+    <div class="setting-group" id="color-options"></div>
+    <div class="setting-group">
+        <button class="size-btn selected" data-size="5" title="細い"><span class="dot" style="width:6px; height:6px;"></span></button>
+        <button class="size-btn" data-size="10" title="普通"><span class="dot" style="width:12px; height:12px;"></span></button>
+        <button class="size-btn" data-size="20" title="太い"><span class="dot" style="width:18px; height:18px;"></span></button>
+        <button class="size-btn" data-size="40" title="極太"><span class="dot" style="width:24px; height:24px;"></span></button>
+    </div>
+    <div class="setting-group">
+        <button class="opacity-btn selected" data-alpha="1.0">100%</button>
+        <button class="opacity-btn" data-alpha="0.75">75%</button>
+        <button class="opacity-btn" data-alpha="0.5">50%</button>
+        <button class="opacity-btn" data-alpha="0.25">25%</button>
+    </div>
+</div>
 
-    <!-- メインコンテンツ -->
-    <main class="flex-grow container mx-auto px-4 py-12 relative">
+<div class="media-controls">
+    <button id="snap-btn" title="画像を保存">📸</button>
+    <button id="record-btn" title="録画開始/停止"><div class="icon"></div></button>
+</div>
 
-        <!-- 1. ホーム (リンク集メニュー) -->
-        <section id="home" class="page-section active">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 to-purple-300">Explore Services</h2>
-                <p class="text-gray-400">目的のアプリケーションを選択してください</p>
-            </div>
+<div id="canvas-container">
+    <canvas id="bgCanvas"></canvas>
+    <canvas id="drawCanvas"></canvas>
+</div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                
-                <!-- Card 1: Download -->
-                <div onclick="navigateTo('download')" class="glass-card rounded-2xl p-8 cursor-pointer group">
-                    <div class="bg-blue-500/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-blue-500/40 transition">
-                        <i data-lucide="cloud-download" class="w-8 h-8 text-blue-300"></i>
-                    </div>
-                    <h3 class="text-2xl font-bold mb-2">App Store</h3>
-                    <p class="text-gray-400 text-sm mb-6">最新のアプリケーションやリソースをダウンロードできます。</p>
-                    <div class="flex items-center text-blue-300 text-sm font-bold group-hover:translate-x-2 transition">
-                        GO TO DOWNLOAD <i data-lucide="arrow-right" class="w-4 h-4 ml-2"></i>
-                    </div>
-                </div>
+<video id="video-feed" playsinline style="display:none;"></video>
 
-                <!-- Card 2: Drawing -->
-                <div onclick="navigateTo('drawing')" class="glass-card rounded-2xl p-8 cursor-pointer group">
-                    <div class="bg-pink-500/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-pink-500/40 transition">
-                        <i data-lucide="palette" class="w-8 h-8 text-pink-300"></i>
-                    </div>
-                    <h3 class="text-2xl font-bold mb-2">Art Canvas</h3>
-                    <p class="text-gray-400 text-sm mb-6">ブラウザ上で自由にスケッチができるお絵描きツールです。</p>
-                    <div class="flex items-center text-pink-300 text-sm font-bold group-hover:translate-x-2 transition">
-                        START DRAWING <i data-lucide="arrow-right" class="w-4 h-4 ml-2"></i>
-                    </div>
-                </div>
+<script>
+    const STORAGE_KEY = 'ar_drawing_data_v4'; 
+    const colors = [
+        { code: '#000000' }, { code: '#FFFFFF' },
+        { code: '#EF4444' }, { code: '#F97316' },
+        { code: '#EAB308' }, { code: '#22C55E' },
+        { code: '#3B82F6' }, { code: '#A855F7' }
+    ];
 
-                <!-- Card 3: Tools -->
-                <div onclick="navigateTo('tool')" class="glass-card rounded-2xl p-8 cursor-pointer group">
-                    <div class="bg-emerald-500/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-emerald-500/40 transition">
-                        <i data-lucide="wrench" class="w-8 h-8 text-emerald-300"></i>
-                    </div>
-                    <h3 class="text-2xl font-bold mb-2">Utilities</h3>
-                    <p class="text-gray-400 text-sm mb-6">パスワード生成や単位変換などの便利ツール集です。</p>
-                    <div class="flex items-center text-emerald-300 text-sm font-bold group-hover:translate-x-2 transition">
-                        OPEN TOOLS <i data-lucide="arrow-right" class="w-4 h-4 ml-2"></i>
-                    </div>
-                </div>
+    let state = {
+        tool: 'pen',
+        hexColor: '#000000',
+        size: 5,
+        alpha: 1.0
+    };
 
-                <!-- 将来的な拡張用のプレースホルダー (非表示、コメントアウト) -->
-                <!-- 
-                <div class="glass-card rounded-2xl p-8 cursor-pointer opacity-50 hover:opacity-100 border-dashed border-2 border-gray-600">
-                    <div class="h-full flex flex-col items-center justify-center text-gray-500">
-                        <i data-lucide="plus" class="w-12 h-12 mb-2"></i>
-                        <span>Add New Page</span>
-                    </div>
-                </div> 
-                -->
+    let activePointers = new Map();
+    let paths = [];
+    let isCameraRunning = false;
+    let videoStream = null;
+    let animationId = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRecording = false;
 
-            </div>
-        </section>
+    const drawCanvas = document.getElementById('drawCanvas');
+    const bgCanvas = document.getElementById('bgCanvas');
+    const drawCtx = drawCanvas.getContext('2d');
+    const bgCtx = bgCanvas.getContext('2d');
+    const recCanvas = document.createElement('canvas');
+    const recCtx = recCanvas.getContext('2d');
+    const video = document.getElementById('video-feed');
+    const penSettingsPanel = document.getElementById('pen-settings');
+    
+    function init() {
+        resize();
+        window.addEventListener('resize', resize);
+        createColorButtons();
+        setupEventListeners();
+        loadFromStorage();
+        bgCtx.fillStyle = 'white';
+        bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+    }
 
-
-        <!-- 2. ダウンロードページ -->
-        <section id="download" class="page-section">
-            <button onclick="navigateTo('home')" class="mb-8 flex items-center text-gray-400 hover:text-white transition">
-                <i data-lucide="arrow-left" class="w-5 h-5 mr-2"></i> Back to Home
-            </button>
-            <h2 class="text-3xl font-bold mb-8 flex items-center"><i data-lucide="cloud-download" class="mr-3 text-blue-400"></i> Downloads</h2>
-
-            <div class="space-y-4">
-                <!-- Download Item 1 -->
-                <div class="glass-card p-6 rounded-xl flex items-center justify-between">
-                    <div class="flex items-center gap-4">
-                        <div class="bg-white/10 p-3 rounded-lg"><i data-lucide="box" class="w-6 h-6 text-blue-300"></i></div>
-                        <div>
-                            <h4 class="font-bold text-lg">System Optimizer v2.0</h4>
-                            <p class="text-xs text-gray-400">Size: 45MB | Updated: 2023-10-25</p>
-                        </div>
-                    </div>
-                    <button class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-lg text-sm font-bold transition flex items-center">
-                        Download <i data-lucide="download" class="w-4 h-4 ml-2"></i>
-                    </button>
-                </div>
-
-                <!-- Download Item 2 -->
-                <div class="glass-card p-6 rounded-xl flex items-center justify-between">
-                    <div class="flex items-center gap-4">
-                        <div class="bg-white/10 p-3 rounded-lg"><i data-lucide="image" class="w-6 h-6 text-purple-300"></i></div>
-                        <div>
-                            <h4 class="font-bold text-lg">Wallpaper Pack 4K</h4>
-                            <p class="text-xs text-gray-400">Size: 120MB | Updated: 2023-11-01</p>
-                        </div>
-                    </div>
-                    <button class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-lg text-sm font-bold transition flex items-center">
-                        Download <i data-lucide="download" class="w-4 h-4 ml-2"></i>
-                    </button>
-                </div>
-            </div>
-        </section>
-
-
-        <!-- 3. お絵描きページ -->
-        <section id="drawing" class="page-section">
-            <!--button onclick="navigateTo('home')" class="mb-8 flex items-center text-gray-400 hover:text-white transition">
-                <i data-lucide="arrow-left" class="w-5 h-5 mr-2"></i> Back to Home
-            </button>
-            
-            <div class="flex flex-col md:flex-row justify-between items-end mb-4">
-                <h2 class="text-3xl font-bold flex items-center"><i data-lucide="palette" class="mr-3 text-pink-400"></i> Canvas</h2>
-                <div class="flex gap-2 mt-4 md:mt-0">
-                    <button onclick="clearCanvas()" class="px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/40 text-red-200 text-sm transition">Clear</button>
-                    <button onclick="saveCanvas()" class="px-4 py-2 rounded-lg bg-pink-600 hover:bg-pink-500 text-white text-sm transition">Save Image</button>
-                </div>
-            </div>
-
-            <div class="glass-card p-4 rounded-xl relative overflow-hidden">
-                <div class="absolute top-6 left-6 flex flex-col gap-2 z-10 bg-black/40 p-2 rounded-lg backdrop-blur-sm">
-                    <div class="w-6 h-6 rounded-full bg-white cursor-pointer border-2 border-transparent hover:scale-110 transition" onclick="setColor('#ffffff')"></div>
-                    <div class="w-6 h-6 rounded-full bg-red-500 cursor-pointer border-2 border-transparent hover:scale-110 transition" onclick="setColor('#ef4444')"></div>
-                    <div class="w-6 h-6 rounded-full bg-blue-500 cursor-pointer border-2 border-transparent hover:scale-110 transition" onclick="setColor('#3b82f6')"></div>
-                    <div class="w-6 h-6 rounded-full bg-green-500 cursor-pointer border-2 border-transparent hover:scale-110 transition" onclick="setColor('#22c55e')"></div>
-                    <div class="w-6 h-6 rounded-full bg-yellow-500 cursor-pointer border-2 border-transparent hover:scale-110 transition" onclick="setColor('#eab308')"></div>
-                </div>
-                <canvas id="drawCanvas" class="w-full h-[500px] bg-gray-900/50 rounded-lg cursor-crosshair touch-none"></canvas>
-            </div-->
-<iframe src="drawing.html" width="100%" height="1000"></iframe>
-            <p class="text-center text-gray-500 text-xs mt-2">マウスまたはタッチで描画できます</p>
-        </section>
-
-
-        <!-- 4. 便利ツールページ -->
-        <section id="tool" class="page-section">
-            <button onclick="navigateTo('home')" class="mb-8 flex items-center text-gray-400 hover:text-white transition">
-                <i data-lucide="arrow-left" class="w-5 h-5 mr-2"></i> Back to Home
-            </button>
-            <h2 class="text-3xl font-bold mb-8 flex items-center"><i data-lucide="wrench" class="mr-3 text-emerald-400"></i> Secure Password Generator</h2>
-
-            <div class="glass-card p-8 rounded-2xl max-w-2xl mx-auto">
-                <div class="mb-6">
-                    <label class="block text-gray-400 text-sm mb-2">Generated Password</label>
-                    <div class="flex gap-2">
-                        <input type="text" id="passwordResult" readonly class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-3 text-emerald-300 font-mono text-lg outline-none focus:border-emerald-500/50 transition">
-                        <button onclick="copyPassword()" class="bg-emerald-600 hover:bg-emerald-500 px-4 rounded-lg transition" title="Copy">
-                            <i data-lucide="copy" class="w-5 h-5"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="space-y-4 mb-8">
-                    <div>
-                        <div class="flex justify-between mb-1">
-                            <label class="text-sm">Length</label>
-                            <span id="lengthValue" class="text-emerald-400 font-bold">12</span>
-                        </div>
-                        <input type="range" min="6" max="32" value="12" id="lengthRange" class="w-full accent-emerald-500 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
-                    </div>
-                    
-                    <div class="flex gap-6 pt-2">
-                        <label class="flex items-center cursor-pointer">
-                            <input type="checkbox" id="checkNumbers" checked class="w-4 h-4 rounded accent-emerald-500 bg-gray-700 border-gray-600">
-                            <span class="ml-2 text-sm">Numbers</span>
-                        </label>
-                        <label class="flex items-center cursor-pointer">
-                            <input type="checkbox" id="checkSymbols" checked class="w-4 h-4 rounded accent-emerald-500 bg-gray-700 border-gray-600">
-                            <span class="ml-2 text-sm">Symbols</span>
-                        </label>
-                    </div>
-                </div>
-
-                <button onclick="generatePassword()" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 py-3 rounded-lg font-bold shadow-lg shadow-emerald-900/50 transition transform hover:scale-[1.02]">
-                    Generate New Password
-                </button>
-            </div>
-        </section>
-
-    </main>
-
-    <footer class="p-6 text-center text-gray-500 text-sm">
-        &copy; 2024 Creative Portal. All rights reserved.
-    </footer>
-
-    <script>
-        // --- ページ遷移ロジック ---
-        function navigateTo(pageId) {
-            // 全てのセクションを非表示
-            document.querySelectorAll('.page-section').forEach(el => {
-                el.classList.remove('active');
-                // アニメーションリセットのために一度display:noneする処理はCSSクラス切り替えで対応
-                setTimeout(() => {
-                    if(!el.classList.contains('active')) el.style.display = 'none';
-                }, 400); 
-            });
-
-            // ターゲットを表示
-            const target = document.getElementById(pageId);
-            target.style.display = 'block';
-            // display:blockが適用された直後にクラスを追加してフェードインさせる
-            requestAnimationFrame(() => {
-                target.classList.add('active');
-            });
-            
-            // お絵描きページの場合、キャンバスサイズを調整
-            if(pageId === 'drawing') {
-                setTimeout(resizeCanvas, 100);
-            }
+    function resize() {
+        const w = window.innerWidth, h = window.innerHeight;
+        drawCanvas.width = w; drawCanvas.height = h;
+        bgCanvas.width = w; bgCanvas.height = h;
+        recCanvas.width = w; recCanvas.height = h;
+        redrawLines();
+        if (!isCameraRunning) {
+            bgCtx.fillStyle = 'white';
+            bgCtx.fillRect(0, 0, w, h);
         }
+    }
 
-        // --- アイコン初期化 ---
-        lucide.createIcons();
-
-        // --- お絵描き機能 ---
-        const canvas = document.getElementById('drawCanvas');
-        const ctx = canvas.getContext('2d');
-        let isDrawing = false;
-        let currentColor = '#ffffff';
-
-        function resizeCanvas() {
-            const parent = canvas.parentElement;
-            canvas.width = parent.clientWidth;
-            canvas.height = parent.clientHeight; // CSS height is fixed at 500px, but useful to match logical pixels
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.strokeStyle = currentColor;
-            ctx.lineWidth = 3;
-        }
-
-        function startDraw(e) {
-            isDrawing = true;
-            draw(e);
-        }
-        function endDraw() {
-            isDrawing = false;
-            ctx.beginPath();
-        }
-        function draw(e) {
-            if (!isDrawing) return;
-            
-            const rect = canvas.getBoundingClientRect();
-            const x = (e.clientX || e.touches[0].clientX) - rect.left;
-            const y = (e.clientY || e.touches[0].clientY) - rect.top;
-
-            ctx.lineTo(x, y);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-        }
-        function setColor(color) {
-            currentColor = color;
-            ctx.strokeStyle = currentColor;
-        }
-        function clearCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-        function saveCanvas() {
-            const link = document.createElement('a');
-            link.download = 'my-drawing.png';
-            link.href = canvas.toDataURL();
-            link.click();
-        }
-
-        canvas.addEventListener('mousedown', startDraw);
-        canvas.addEventListener('mouseup', endDraw);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseleave', endDraw);
-        
-        // タッチ対応
-        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDraw(e); });
-        canvas.addEventListener('touchend', endDraw);
-        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); });
-
-        // --- ツール機能 (パスワード生成) ---
-        const passOutput = document.getElementById('passwordResult');
-        const lengthRange = document.getElementById('lengthRange');
-        const lengthValue = document.getElementById('lengthValue');
-        
-        lengthRange.addEventListener('input', (e) => {
-            lengthValue.textContent = e.target.value;
+    function createColorButtons() {
+        const container = document.getElementById('color-options');
+        colors.forEach(c => {
+            const btn = document.createElement('button');
+            btn.className = 'color-btn';
+            btn.style.backgroundColor = c.code;
+            if (c.code === '#FFFFFF') btn.style.border = '1px solid #ccc';
+            if (c.code === state.hexColor) btn.classList.add('selected');
+            btn.onclick = () => {
+                state.hexColor = c.code;
+                updateUISelection('.color-btn', btn);
+                switchToPen();
+            };
+            container.appendChild(btn);
         });
+    }
 
-        function generatePassword() {
-            const length = parseInt(lengthRange.value);
-            const hasNumbers = document.getElementById('checkNumbers').checked;
-            const hasSymbols = document.getElementById('checkSymbols').checked;
-            
-            const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-            const numbers = "0123456789";
-            const symbols = "!@#$%^&*()_+~`|}{[]:;?><,./-=";
-            
-            let chars = letters;
-            if (hasNumbers) chars += numbers;
-            if (hasSymbols) chars += symbols;
-            
-            let password = "";
-            for (let i = 0; i < length; i++) {
-                const randomIndex = Math.floor(Math.random() * chars.length);
-                password += chars[randomIndex];
-            }
-            passOutput.value = password;
-        }
-
-        function copyPassword() {
-            passOutput.select();
-            document.execCommand('copy');
-            // 簡易的なフィードバック
-            const btn = document.querySelector('button[onclick="copyPassword()"]');
-            const originalHTML = btn.innerHTML;
-            btn.innerHTML = '<i data-lucide="check" class="w-5 h-5"></i>';
-            lucide.createIcons();
-            setTimeout(() => {
-                btn.innerHTML = originalHTML;
-                lucide.createIcons();
-            }, 1000);
-        }
-
-        // 初期ロード
-        window.addEventListener('load', () => {
-            generatePassword();
-            resizeCanvas();
+    function setupEventListeners() {
+        document.getElementById('pen-tool-btn').onclick = switchToPen;
+        document.getElementById('eraser-btn').onclick = switchToEraser;
+        document.getElementById('settings-toggle-btn').onclick = (e) => {
+            e.stopPropagation();
+            penSettingsPanel.classList.toggle('show');
+        };
+        document.querySelectorAll('.size-btn').forEach(btn => {
+            btn.onclick = () => {
+                state.size = parseInt(btn.dataset.size);
+                updateUISelection('.size-btn', btn);
+            };
         });
-        window.addEventListener('resize', resizeCanvas);
+        document.querySelectorAll('.opacity-btn').forEach(btn => {
+            btn.onclick = () => {
+                state.alpha = parseFloat(btn.dataset.alpha);
+                updateUISelection('.opacity-btn', btn);
+            };
+        });
+        document.getElementById('undo-btn').onclick = undo;
+        document.getElementById('clear-btn').onclick = clearAll;
+        document.getElementById('camera-btn').onclick = toggleCamera;
+        document.getElementById('snap-btn').onclick = takeSnapshot;
+        document.getElementById('record-btn').onclick = toggleRecording;
 
-    </script>
+        drawCanvas.addEventListener('pointerdown', handlePointerDown);
+        drawCanvas.addEventListener('pointermove', handlePointerMove);
+        drawCanvas.addEventListener('pointerup', handlePointerUp);
+        drawCanvas.addEventListener('pointercancel', handlePointerUp);
+    }
+
+    function updateUISelection(selector, activeBtn) {
+        document.querySelectorAll(selector).forEach(b => b.classList.remove('selected'));
+        activeBtn.classList.add('selected');
+    }
+
+    function switchToPen() {
+        state.tool = 'pen';
+        document.getElementById('pen-tool-btn').classList.add('active-tool');
+        document.getElementById('eraser-btn').classList.remove('active-tool');
+        penSettingsPanel.classList.add('show');
+    }
+
+    function switchToEraser() {
+        state.tool = 'eraser';
+        document.getElementById('pen-tool-btn').classList.remove('active-tool');
+        document.getElementById('eraser-btn').classList.add('active-tool');
+        penSettingsPanel.classList.remove('show');
+    }
+
+    function getRgbaColor(hex, alpha) {
+        const r = parseInt(hex.substring(1, 3), 16);
+        const g = parseInt(hex.substring(3, 5), 16);
+        const b = parseInt(hex.substring(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function redrawLines() {
+        drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+        drawCtx.lineCap = 'round';
+        drawCtx.lineJoin = 'round';
+        paths.forEach(path => drawPath(path));
+        activePointers.forEach(path => drawPath(path));
+    }
+
+    // ★★★ スムージング処理の実装箇所 ★★★
+    function drawPath(path) {
+        const p = path.points;
+        if (p.length < 1) return;
+
+        drawCtx.save();
+        drawCtx.lineWidth = path.width;
+        
+        if (path.tool === 'eraser') {
+            drawCtx.globalCompositeOperation = 'destination-out';
+        } else {
+            drawCtx.globalCompositeOperation = 'source-over';
+            drawCtx.strokeStyle = path.color;
+        }
+
+        drawCtx.beginPath();
+
+        if (p.length === 1) {
+            // 点が1つの場合は円を描画
+            drawCtx.arc(p[0].x, p[0].y, path.width / 2, 0, Math.PI * 2);
+            if (path.tool !== 'eraser') drawCtx.fillStyle = path.color;
+            drawCtx.fill();
+        } else {
+            // 滑らかな曲線描画ロジック
+            drawCtx.moveTo(p[0].x, p[0].y);
+            
+            // 点が3つ未満なら直線
+            if (p.length < 3) {
+                for (let i = 1; i < p.length; i++) {
+                    drawCtx.lineTo(p[i].x, p[i].y);
+                }
+            } else {
+                // quadraticCurveToで中点同士を結ぶ
+                let i;
+                for (i = 1; i < p.length - 2; i++) {
+                    const xc = (p[i].x + p[i + 1].x) / 2;
+                    const yc = (p[i].y + p[i + 1].y) / 2;
+                    // p[i]を制御点とし、中点(xc, yc)へ線を引く
+                    drawCtx.quadraticCurveTo(p[i].x, p[i].y, xc, yc);
+                }
+                // 最後の2点は曲線で結びきる
+                drawCtx.quadraticCurveTo(p[i].x, p[i].y, p[i + 1].x, p[i + 1].y);
+            }
+            drawCtx.stroke();
+        }
+        drawCtx.restore();
+    }
+
+    // --- Pointer Events ---
+    function handlePointerDown(e) {
+        e.preventDefault();
+        penSettingsPanel.classList.remove('show');
+
+        const drawColor = getRgbaColor(state.hexColor, state.alpha);
+        const newPath = {
+            id: e.pointerId,
+            points: [{ x: e.clientX, y: e.clientY }],
+            tool: state.tool,
+            color: drawColor,
+            width: state.tool === 'eraser' ? 25 : state.size
+        };
+        activePointers.set(e.pointerId, newPath);
+        drawCanvas.setPointerCapture(e.pointerId);
+        redrawLines();
+    }
+
+    function handlePointerMove(e) {
+        if (!activePointers.has(e.pointerId)) return;
+        const path = activePointers.get(e.pointerId);
+        path.points.push({ x: e.clientX, y: e.clientY });
+        redrawLines();
+    }
+
+    function handlePointerUp(e) {
+        if (activePointers.has(e.pointerId)) {
+            const path = activePointers.get(e.pointerId);
+            paths.push(path);
+            activePointers.delete(e.pointerId);
+            drawCanvas.releasePointerCapture(e.pointerId);
+            redrawLines();
+            saveToStorage();
+        }
+    }
+
+    function undo() {
+        if (paths.length > 0) {
+            paths.pop();
+            redrawLines();
+            saveToStorage();
+        }
+    }
+    function clearAll() {
+        if (confirm('すべて消去しますか？')) {
+            paths = [];
+            redrawLines();
+            saveToStorage();
+        }
+    }
+    function saveToStorage() {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(paths)); } catch(e){}
+    }
+    function loadFromStorage() {
+        const json = localStorage.getItem(STORAGE_KEY);
+        if (json) { try { paths = JSON.parse(json); redrawLines(); } catch(e){} }
+    }
+
+    // カメラ・録画関連
+    async function toggleCamera() {
+        if (isCameraRunning) stopCamera();
+        else await startCamera();
+    }
+    async function startCamera() {
+        try {
+            const constraints = { video: { facingMode: 'environment' }, audio: false };
+            videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = videoStream;
+            await video.play();
+            isCameraRunning = true;
+            document.getElementById('camera-btn').classList.add('camera-active');
+            renderCameraLoop();
+        } catch (err) { alert('Camera Error: ' + err.message); }
+    }
+    function stopCamera() {
+        if (videoStream) videoStream.getTracks().forEach(t => t.stop());
+        cancelAnimationFrame(animationId);
+        video.srcObject = null;
+        isCameraRunning = false;
+        document.getElementById('camera-btn').classList.remove('camera-active');
+        bgCtx.fillStyle = 'white';
+        bgCtx.fillRect(0,0, bgCanvas.width, bgCanvas.height);
+    }
+    function renderCameraLoop() {
+        if (!isCameraRunning) return;
+        const w = bgCanvas.width, h = bgCanvas.height;
+        const vW = video.videoWidth, vH = video.videoHeight;
+        const scale = Math.max(w / vW, h / vH);
+        const dW = vW * scale, dH = vH * scale;
+        bgCtx.drawImage(video, (w - dW)/2, (h - dH)/2, dW, dH);
+        if (isRecording) {
+            recCtx.drawImage(bgCanvas, 0, 0);
+            recCtx.drawImage(drawCanvas, 0, 0);
+        }
+        animationId = requestAnimationFrame(renderCameraLoop);
+    }
+    function takeSnapshot() {
+        const tCanvas = document.createElement('canvas');
+        tCanvas.width = drawCanvas.width; tCanvas.height = drawCanvas.height;
+        const tCtx = tCanvas.getContext('2d');
+        tCtx.drawImage(bgCanvas, 0, 0);
+        tCtx.drawImage(drawCanvas, 0, 0);
+        const link = document.createElement('a');
+        link.download = `drawing-${Date.now()}.png`;
+        link.href = tCanvas.toDataURL('image/png');
+        link.click();
+    }
+    function toggleRecording() { isRecording ? stopRecording() : startRecording(); }
+    function startRecording() {
+        recordedChunks = [];
+        const stream = recCanvas.captureStream(30);
+        try { mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' }); }
+        catch (e) { mediaRecorder = new MediaRecorder(stream); }
+        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `video-${Date.now()}.webm`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        };
+        mediaRecorder.start();
+        isRecording = true;
+        document.getElementById('record-btn').classList.add('recording');
+        if (!isCameraRunning) loopRec();
+    }
+    function stopRecording() {
+        if (mediaRecorder) mediaRecorder.stop();
+        isRecording = false;
+        document.getElementById('record-btn').classList.remove('recording');
+    }
+    function loopRec() {
+        if (!isRecording || isCameraRunning) return;
+        recCtx.fillStyle = 'white';
+        recCtx.fillRect(0,0,recCanvas.width,recCanvas.height);
+        recCtx.drawImage(drawCanvas,0,0);
+        requestAnimationFrame(loopRec);
+    }
+
+    init();
+</script>
 </body>
 </html>
